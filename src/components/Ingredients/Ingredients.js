@@ -4,6 +4,7 @@ import IngredientForm from './IngredientForm';
 import IngredientList from './IngredientList';
 import ErrorModal from '../UI/ErrorModal';
 import Search from './Search';
+import useHttp from '../../hooks/http';
 
 const ingredientReducer = (currentIngredients, action)=>{
   switch(action.type){
@@ -18,76 +19,44 @@ const ingredientReducer = (currentIngredients, action)=>{
   }
 }
 
-const httpReducer=(httpState,action)=>{
-  switch(action.type){
-    case 'SEND':
-      return {loading:true,error:null}
-    case 'RESPONSE':
-      return {...httpState,loading:false}
-    case 'ERROR':
-      return {loading:false,error : action.errorMessage}
-    case 'CLEAR':
-      return { ...httpState, error:null}
-    default: 
-     throw new Error('Error')  
-  }
-}
-
 const Ingredients=()=> {
   const [ingredients,dispatch]= useReducer(ingredientReducer,[])
-  const [httpState, dispatchHttp] = useReducer(httpReducer,{loading:false, error:null})
-  //const [ingredients,setIngredients]=useState([])
-  //const [loading,setLoading]=useState(false)
- //const [error,setError]=useState()
+  const { isLoading, data, error, sendRequest, reqExtra, reqIdentifier, clear} = useHttp()
 
-  const addIngredient = ingredient=>{
-    dispatchHttp({type:'SEND'})
-    fetch('https://hooks-udemy-3067e-default-rtdb.firebaseio.com/ingredients.json',{
-      method:'POST',
-      body: JSON.stringify(ingredient),
-      headers:{'Content-Type':'application/json'}
-    }).then(response=>{
-      dispatchHttp({ type: 'RESPONSE' })
-      return response.json()  
-    }).then(responseData=>{
-     // setIngredients(prevIngredients => [
-     //   ...prevIngredients,
-     //   { id: responseData.name, ...ingredient }
-     // ])
-     dispatch({type:'ADD',ingredient:{id:responseData.name, ...ingredient}})
-    })
-  }
+  useEffect(()=>{
+    if (!isLoading && reqIdentifier === 'REMOVE_IGREDIENT'){
+      dispatch({type:'DELETE', id:reqExtra})
+    } else if (!isLoading && !error && reqIdentifier === 'ADD_IGREDIENT'){
+      dispatch({
+        type: 'ADD', ingredient: {
+          id: data.name, ...reqExtra
+      }})
+    }
+  },[data,reqExtra, reqIdentifier,isLoading, error])
+
+  const addIngredient = useCallback(ingredient=>{
+  
+  sendRequest('https://hooks-udemy-3067e-default-rtdb.firebaseio.com/ingredients.json','POST', JSON.stringify(ingredient),
+  ingredient,
+   'ADD_IGREDIENT' 
+  )
+  }, [sendRequest])
 
   const filteredIngredientsHandler = useCallback(
       filteredIngredients => {
-        //setIngredients(filteredIngredients)
       dispatch({ type: 'SET', ingredients: filteredIngredients})
       },[]
   ) 
 
-  const deleteItem=(itemId)=>{
-    dispatchHttp({ type: 'SEND' })
-    fetch(`https://hooks-udemy-3067e-default-rtdb.firebaseio.com/ingredients/${itemId}.json`, {
-      method: 'DELETE'
-    }).then(response=>{
-      dispatchHttp({ type: 'RESPONSE' })
-     // setIngredients(prevIngredients =>
-     //   prevIngredients.filter(ingredient => ingredient.id !== itemId)
-     //)
-     dispatch({ type: 'DELETE', id: itemId})
-    }).catch(error=>{
-      dispatchHttp({ type: 'ERROR',errorMessage:'Something went wrong' })
-      
-    })
-    }
+  const deleteItem=useCallback((itemId)=>{
+    sendRequest(`https://hooks-udemy-3067e-default-rtdb.firebaseio.com/ingredients/${itemId}.json`, 'DELETE', null, itemId,'REMOVE_IGREDIENT')
+   
+  }, [sendRequest]) 
 
-    const clearError=()=>{
-      dispatchHttp({ type: 'CLEAR' })
-    }
   return (
     <div className="App">
-      {httpState.error && <ErrorModal onClose={clearError}>{httpState.error}</ErrorModal>}
-      <IngredientForm onAddIngredient={addIngredient} loading={httpState.loading}/>
+      {error && <ErrorModal onClose={clear}>{error}</ErrorModal>}
+      <IngredientForm onAddIngredient={addIngredient} loading={isLoading}/>
 
       <section>
         <Search onLoadIngredients={filteredIngredientsHandler}/>
